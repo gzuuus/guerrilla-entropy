@@ -53,7 +53,8 @@ loaders until a second board forces it. YAGNI.
 
 ## Stack
 
-PlatformIO + Arduino-ESP32 core + RadioLib (SX1262). Dev tooling in a
+PlatformIO + Arduino-ESP32 core. (RadioLib will be added when the SX1262
+source lands in phase 4b — not a dependency yet.) Dev tooling in a
 project-local Python venv (`.venv/`). End users never need PlatformIO — they
 flash a prebuilt `.bin`.
 
@@ -102,21 +103,24 @@ RESET manually or the app never starts (chip stays in ROM bootloader).
 
 ```
 src/
-  main.cpp          setup/loop, USB CDC command loop
+  main.cpp          setup/loop, USB CDC command loop + protocol
   source.h          EntropySource interface: begin()->bool, gather(), name()
   sources/
-    trng.cpp          esp_random()              — baseline, universal
-    sx1262_rssi.cpp   RadioLib, RX-no-traffic   — optional
-    adc_float.cpp     floating-pin ADC LSBs     — baseline, universal
-  health.h          per-source repetition + proportion tests (NIST SP 800-90B-lite); 'T' on-device self-test
-  pool.cpp          SHA-256 sponge mixer (HW-accel), PSRAM-backed
-  store.cpp         flash-partition snapshot (v2)
+    trng.h            esp_random()            — baseline, universal
+    adc_float.h       floating-pin ADC LSBs   — baseline, universal
+  pool.h            SHA-256 sponge mixer (mbedtls, HW-accel)
+  health.h          per-source repetition + proportion tests; 'T' self-test
+  (store.*          flash-partition snapshot      — phase 7, not yet built)
+  (sources/sx1262_rssi.*  LoRa RSSI via RadioLib  — phase 4b, not yet built)
 tools/
   capture.py        raw capture -> .bin (for ent/gzip validation)
   seed.py           seed generator: device + optional external (dice/keystrokes)
                     -> hex / BIP39 mnemonic (XOR mix, invariant-preserving)
   bip39_english.txt canonical BIP39 wordlist (vector-verified)
 ```
+
+Sources are header-only (`.h`) until a source needs substantial implementation
+(SX1262 will warrant a `.cpp`).
 
 ## Adding an entropy source
 
