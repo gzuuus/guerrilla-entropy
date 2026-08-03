@@ -112,7 +112,10 @@ src/
   pool.cpp          SHA-256 sponge mixer (HW-accel), PSRAM-backed
   store.cpp         flash-partition snapshot (v2)
 tools/
-  capture.py        host: grab N bytes, XOR in dice/keystrokes, write file
+  capture.py        raw capture -> .bin (for ent/gzip validation)
+  seed.py           seed generator: device + optional external (dice/keystrokes)
+                    -> hex / BIP39 mnemonic (XOR mix, invariant-preserving)
+  bip39_english.txt canonical BIP39 wordlist (vector-verified)
 ```
 
 ## Adding an entropy source
