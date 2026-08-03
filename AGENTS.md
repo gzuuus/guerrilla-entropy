@@ -108,7 +108,7 @@ src/
     trng.cpp          esp_random()              — baseline, universal
     sx1262_rssi.cpp   RadioLib, RX-no-traffic   — optional
     adc_float.cpp     floating-pin ADC LSBs     — baseline, universal
-  health.cpp        per-source repetition + proportion tests (NIST SP 800-90B-lite)
+  health.h          per-source repetition + proportion tests (NIST SP 800-90B-lite); 'T' on-device self-test
   pool.cpp          SHA-256 sponge mixer (HW-accel), PSRAM-backed
   store.cpp         flash-partition snapshot (v2)
 tools/

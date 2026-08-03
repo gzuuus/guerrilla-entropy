@@ -1,0 +1,19 @@
+# Health-gate behavior — all-sources mixed, 250 KB
+# date: 2026-08-03T12:09:29Z
+# firmware: phase 5 (health-gated)
+# thresholds: REP_CUTOFF=5, proportion cutoff = n/4
+
+on-device self-test ('T'):
+  stuck 0xAA x64      FAIL (want FAIL)
+  stuck 0x00 x64      FAIL (want FAIL)
+  biased 50/14        FAIL (want FAIL)
+  varied esp_random   PASS (want PASS)
+
+live counters after 250KB all-sources mixed (3908 rounds):
+  trng       pass=3908 fail=0     <- no false positives on clean source
+  adc_float  pass=3899 fail=9     <- gate rejected ~0.2% of marginal chunks
+  failclose_rounds = 0           <- graceful degradation (TRNG always healthy)
+
+output quality (gate did not degrade output):
+  ent:     7.9993 bits/byte
+  gzip:    100.0% (incompressible)
