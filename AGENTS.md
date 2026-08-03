@@ -129,16 +129,21 @@ tools/
 
 ## Validation (required before any "it works" claim)
 
-1. Capture via `tools/capture.py` (supports `-s` source select, `-m raw|mixed`).
-2. Run `ent` and NIST STS. Save report under `reports/`.
-3. "Looks random" without these tests means nothing.
+**Quality gate = `ent` + `gzip`** (two independent, cheap signals):
+- `ent` — uniformity (entropy bits/byte → 8.0, chi-square p not pathological).
+- `gzip` — incompressibility (compressed/orig ≈ 100%; biased/structured data
+  compresses smaller — e.g. raw ADC → 87%, flagged).
+
+Capture via `tools/capture.py` (supports `-s` source, `-m raw|mixed`); save
+reports under `reports/`. SP800-90B / NIST STS deferred — revisit when adding
+a new physical source of unknown quality (e.g. avalanche-noise board).
 
 **`ent` measures uniformity, NOT entropy.** The SHA-256 pool makes *any* input
-look uniform — a passing `ent` on pooled output does NOT prove the source
+look uniform — a passing gate on pooled output does NOT prove the source
 contributed unpredictability. To judge a source, contrast raw vs pooled
 (`-m raw` then `-m mixed`): raw shows the source's real distribution/bias,
 pooled shows the mixer doing its job. Real trust comes from multiple
-independent sources + external dice, never from a single `ent` pass.
+independent sources + external dice, never from a single gate pass.
 
 ## Git
 
