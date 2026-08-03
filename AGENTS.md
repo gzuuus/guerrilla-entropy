@@ -74,15 +74,29 @@ source .venv/bin/activate        # then: pio ...
 .venv/bin/pio device monitor     # serial @ 115200
 ```
 
+**Full flash dance** (native USB has no auto-reset — see gotcha #1):
+`BOOT+RESET` (enter bootloader) → `pio run -t upload` → `RESET` (launch app).
+The upload's "Hard resetting via RTS pin" line is a **no-op** — you MUST tap
+RESET manually or the app never starts (chip stays in ROM bootloader).
+
 ## Hardware gotchas (these cost real time — respect them)
 
-1. **Auto-reset over USB CDC fails on the T3S3.** Enter download mode by:
-   hold **BOOT** → tap **RESET** → release **BOOT**. Before every flash.
+1. **Auto-reset over USB CDC fails on the T3S3 — two button presses per flash.**
+   To enter download mode: hold **BOOT** → tap **RESET** → release **BOOT**.
+   After `pio run -t upload` finishes, tap **RESET** again (no BOOT) to actually
+   launch the app. The upload's RTS reset is a no-op on native USB.
 2. **Debian's system `esptool` is broken** (missing `stub_flasher_32s3.json`).
    Use `--no-stub` for reads, or the venv's pip-installed `esptool` for flashing.
 3. **USB CDC vanishes ~1 s on reset** — boot-log capture must tolerate reconnect.
 4. **NOR flash = erase-before-write at 4 KB sectors, ~100k cycles.** Always
    buffer in PSRAM and flush a full sector. Never write byte-at-a-time.
+5. **The `esp32-s3-devkitc-1` board def is the 8 MB / no-PSRAM N8 variant.**
+   Our T3S3 is 4 MB flash + 2 MB PSRAM. If the binary header overstates flash
+   size, the chip fails its flash probe at boot (`do_core_init` assert, boot
+   loop). Override **all three** knobs in `platformio.ini` — `board_build.flash_size` alone
+   only fixes the partition table, not the image header:
+   `board_build.flash_size=4MB`, `board_build.partitions=default.csv`,
+   `board_upload.flash_size=4MB`.
 
 ## Architecture
 
