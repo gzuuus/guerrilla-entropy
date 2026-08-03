@@ -15,7 +15,7 @@ Modes:
   -e TEXT      non-interactive external entropy (e.g. dice rolls)
   --self-test  validate BIP39 against known vectors (no device needed)
 """
-import argparse, hashlib, os, serial, sys, time
+import argparse, hashlib, math, os, serial, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORDLIST = os.path.join(HERE, "bip39_english.txt")
@@ -89,14 +89,33 @@ def collect_interactive():
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
         if not chars:
-            return None
+            return None, 0, 0
         blob = bytes(chars) + b"".join((d & 0xFFFF_FFFF_FFFF_FFFF).to_bytes(8, "little") for d in deltas)
         print(f"  captured {len(chars)} chars, {len(deltas)} timing samples")
-        return blob
+        return blob, len(chars), len(deltas)
     except (ImportError, ValueError):
         # non-tty / non-unix fallback
         s = input("  external string: ").strip()
-        return s.encode() if s else None
+        return (s.encode(), len(s), 0) if s else (None, 0, 0)
+
+
+def estimate_external(char_bytes, n_timings):
+    """Rough entropy estimate of the external input. This is an ESTIMATE, not a
+    measurement (see AGENTS.md: entropy isn't directly observable). Dice rolls
+    (digits 1-6) are counted exactly; other chars and keystroke timings use
+    conservative per-sample figures. The result is the resilience the external
+    input adds IF the device were compromised — not additive to the seed."""
+    nonspace = [b for b in char_bytes if b not in b" \t\n\r"]
+    dice = sum(1 for b in nonspace if 0x31 <= b <= 0x36)   # '1'..'6'
+    other = len(nonspace) - dice
+    bits, parts = 0.0, []
+    if dice:
+        bits += dice * math.log2(6); parts.append(f"{dice} dice={dice * math.log2(6):.0f}")
+    if other:
+        bits += other * 2.0; parts.append(f"{other} chars={other * 2:.0f}")
+    if n_timings:
+        bits += n_timings * 4.0; parts.append(f"{n_timings} timing={n_timings * 4:.0f}")
+    return bits, " + ".join(parts) if parts else "0"
 
 
 # ---------- device capture ----------
@@ -156,13 +175,14 @@ def main():
 
     dev = capture_device(a.port, a.baud, a.bytes)
 
-    ext_blob = None
+    ext_blob, ext_chars, ext_timings = None, 0, 0
     if a.device_only:
-        ext_blob = None
+        pass
     elif a.external is not None:
         ext_blob = a.external.encode("utf-8")
+        ext_chars = len(a.external)
     else:
-        ext_blob = collect_interactive()
+        ext_blob, ext_chars, ext_timings = collect_interactive()
 
     if ext_blob:
         ext = hashlib.shake_256(ext_blob).digest(a.bytes)
@@ -171,14 +191,23 @@ def main():
         ext = None
         seed = dev
 
+    dev_bits = len(dev) * 8
     print()
     print(f"device   ({len(dev):2d}B): {dev.hex()}")
+    print(f"  ~{dev_bits} bits (device floor; TRNG-backed)")
     if ext is not None:
+        ext_bits, breakdown = estimate_external(ext_blob[:ext_chars], ext_timings)
         print(f"external ({len(ext):2d}B): {ext.hex()}")
+        print(f"  ~{ext_bits:.0f} bits est. ({breakdown})  [rough - resilience if device compromised]")
     else:
-        print(f"external      : <none — device-only>")
-    print("─" * 39)
+        ext_bits = 0
+        print("external      : <none - device-only>")
+    print("-" * 39)
     print(f"seed     ({len(seed):2d}B): {seed.hex()}")
+    if ext_bits:
+        print(f"  ~{dev_bits} bits via device + ~{ext_bits:.0f} external as resilience")
+    else:
+        print(f"  ~{dev_bits} bits (device floor, device-only)")
     if a.bip39:
         words_count = (len(seed) * 8 + len(seed) * 8 // 32) // 11
         print()
