@@ -1,23 +1,48 @@
 #include <Arduino.h>
+#include "source.h"
+#include "sources/trng.h"
 
-// Phase 1 — toolchain vertical slice.
-// Confirms: PlatformIO build -> esptool flash -> our firmware runs ->
-// output appears on native USB CDC (/dev/ttyACM0).
-// No entropy logic yet. No pin writes (avoid guessing the LED pin until verified).
+// Phase 2 — TRNG end-to-end. Command-gated raw binary over USB CDC.
+// Protocol (one byte each): 'G' = stream, 'S' = stop, 'I' = info.
+// Text is emitted only when idle / on 'I'; raw bytes only while streaming,
+// so tools/capture.py drains the banner, sends 'G', and gets a clean stream.
+
+namespace {
+TrngSource trng;
+EntropySource* const sources[] = { &trng };
+const size_t num_sources = sizeof(sources) / sizeof(sources[0]);
+
+bool streaming = false;
+uint32_t bytes_emitted = 0;
+}  // namespace
+
+static void print_info() {
+  Serial.println("[guerrilla-entropy] phase 2");
+  Serial.printf("sources (%u):", (unsigned)num_sources);
+  for (auto* s : sources) Serial.printf(" %s", s->name());
+  Serial.println();
+  Serial.printf("emitted: %u bytes  streaming: %d\n", bytes_emitted, streaming);
+}
 
 void setup() {
   Serial.begin(115200);
-  Serial.println();
-  Serial.println("[guerrilla-entropy] phase 1 alive");
-  Serial.printf("chip: %s  rev %d  cores %d\n",
-                ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores());
-  Serial.printf("flash: %u KB  psram: %u KB\n",
-                ESP.getFlashChipSize() / 1024, ESP.getPsramSize() / 1024);
-  Serial.println("---");
+  for (auto* s : sources) s->begin();
+  print_info();
+  Serial.println("cmd: G=stream S=stop I=info");
 }
 
-static uint32_t counter = 0;
 void loop() {
-  Serial.printf("heartbeat #%u\n", counter++);
-  delay(1000);
+  if (Serial.available()) {
+    switch (Serial.read()) {
+      case 'G': streaming = true;  break;
+      case 'S': streaming = false; break;
+      case 'I': print_info();      break;
+    }
+  }
+  if (streaming) {
+    uint8_t buf[256];
+    size_t n = trng.gather(buf, sizeof(buf));
+    Serial.write(buf, n);
+    bytes_emitted += n;
+  }
 }
