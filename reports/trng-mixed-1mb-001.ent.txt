@@ -1,0 +1,23 @@
+# Mixed sample — TRNG -> SHA-256 pool -> USB CDC
+# source:    trng (esp_random), reseeded 1:1 per 64-byte block
+# mixer:     SHA-256 sponge (state 32B, counter domain-sep)
+# size:      1000000 bytes
+# rate:      ~140 KB/s (1118 kbit/s) over native USB CDC
+# date:      2026-08-03T11:28:18Z
+# compare:   reports/trng-1mb-001.ent.txt (raw, no mixer)
+# result:    no regression vs raw; chi^2 p 31%->54%, MC pi err 0.24%->0.09%
+
+0,File-bytes,Entropy,Chi-square,Mean,Monte-Carlo-Pi,Serial-Correlation
+1,1000000,7.999818,252.163072,127.490157,3.138709,-0.001540
+
+Entropy = 7.999818 bits per byte.
+
+Optimum compression would reduce the size
+of this 1000000 byte file by 0 percent.
+
+Chi square distribution for 1000000 samples is 252.16, and randomly
+would exceed this value 53.85 percent of the times.
+
+Arithmetic mean value of data bytes is 127.4902 (127.5 = random).
+Monte Carlo value for Pi is 3.138708555 (error 0.09 percent).
+Serial correlation coefficient is -0.001540 (totally uncorrelated = 0.0).
