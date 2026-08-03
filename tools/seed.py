@@ -2,23 +2,29 @@
 """guerrilla-entropy seed generator.
 
 Captures N bytes from the device, optionally mixes in external entropy
-(dice rolls / keystrokes with timing), and prints the result as hex (and
-optionally a BIP39 mnemonic).
+(dice rolls / coin flips / key mashing — each captures keystroke timing too),
+and prints the result as hex (and optionally a BIP39 mnemonic).
 
 The mix is XOR of two streams: device_bytes XOR shake256(external). Either
 input being good makes the output good — the device can only ever ADD
 uncertainty (see AGENTS.md, THE invariant).
 
 Modes:
-  default      interactive prompt; Enter to skip (device-only) or type to mix
-  --device-only   skip the prompt, pure device output
-  -e TEXT      non-interactive external entropy (e.g. dice rolls)
+  default      interactive guided flow (dice -> coin -> mash; Enter to skip each)
+  --device-only   skip external entropy
+  -e TEXT      non-interactive external entropy as text
   --self-test  validate BIP39 against known vectors (no device needed)
 """
 import argparse, hashlib, math, os, serial, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORDLIST = os.path.join(HERE, "bip39_english.txt")
+
+# Rough per-sample estimates for the unlabeled parts. Clearly rough — see the
+# "ent != entropy" principle in AGENTS.md. Dice/coin values are exact; these
+# cover key-mashing chars and keystroke-timing jitter.
+MASH_CHAR_BITS = 2.5
+TIMING_BITS = 4.0
 
 
 # ---------- BIP39 ----------
@@ -65,57 +71,96 @@ def self_test():
 
 # ---------- external entropy ----------
 
-def collect_interactive():
-    print("Add external entropy? Type dice rolls / coin flips / mash keys.")
-    print("  (Enter to finish, or an empty Enter to SKIP and use device-only)")
+def pack_deltas(deltas):
+    return b"".join((d & 0xFFFF_FFFF_FFFF_FFFF).to_bytes(8, "little") for d in deltas)
+
+
+def read_line_timed(prompt, echo=True, counter_label=None):
+    """Read a line in cbreak mode, capturing per-key nanosecond timings.
+    echo=True prints each typed char; counter_label shows a live counter.
+    Falls back to plain input() (no timing) if stdin is not a tty."""
+    print(prompt)
+    sys.stdout.write("  > ")
     sys.stdout.flush()
+    if not sys.stdin.isatty():
+        return input(), []
     try:
         import termios, tty
         fd = sys.stdin.fileno()
         old = termios.tcgetattr(fd)
-        chars, deltas, prev = bytearray(), [], 0
+        chars, deltas = [], []
+        prev = time.perf_counter_ns()
+        n = 0
         try:
             tty.setcbreak(fd)
-            t0 = time.perf_counter_ns()
-            prev = t0
             while True:
                 ch = sys.stdin.read(1)
                 now = time.perf_counter_ns()
                 if ch in ("\n", "\r"):
                     break
                 deltas.append(now - prev)
-                chars.extend(ch.encode("utf-8", "ignore"))
+                chars.append(ch)
                 prev = now
+                n += 1
+                if echo:
+                    sys.stdout.write(ch); sys.stdout.flush()
+                elif counter_label:
+                    sys.stdout.write(f"\r  {counter_label}: {n} ")
+                    sys.stdout.flush()
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
-        if not chars:
-            return None, 0, 0
-        blob = bytes(chars) + b"".join((d & 0xFFFF_FFFF_FFFF_FFFF).to_bytes(8, "little") for d in deltas)
-        print(f"  captured {len(chars)} chars, {len(deltas)} timing samples")
-        return blob, len(chars), len(deltas)
-    except (ImportError, ValueError):
-        # non-tty / non-unix fallback
-        s = input("  external string: ").strip()
-        return (s.encode(), len(s), 0) if s else (None, 0, 0)
+        print()
+        return "".join(chars), deltas
+    except (ImportError, ValueError, OSError):
+        return input(), []
 
 
-def estimate_external(char_bytes, n_timings):
-    """Rough entropy estimate of the external input. This is an ESTIMATE, not a
-    measurement (see AGENTS.md: entropy isn't directly observable). Dice rolls
-    (digits 1-6) are counted exactly; other chars and keystroke timings use
-    conservative per-sample figures. The result is the resilience the external
-    input adds IF the device were compromised — not additive to the seed."""
-    nonspace = [b for b in char_bytes if b not in b" \t\n\r"]
-    dice = sum(1 for b in nonspace if 0x31 <= b <= 0x36)   # '1'..'6'
-    other = len(nonspace) - dice
-    bits, parts = 0.0, []
-    if dice:
-        bits += dice * math.log2(6); parts.append(f"{dice} dice={dice * math.log2(6):.0f}")
-    if other:
-        bits += other * 2.0; parts.append(f"{other} chars={other * 2:.0f}")
-    if n_timings:
-        bits += n_timings * 4.0; parts.append(f"{n_timings} timing={n_timings * 4:.0f}")
-    return bits, " + ".join(parts) if parts else "0"
+def collect_dice(target):
+    need = math.ceil(target / math.log2(6))
+    txt, deltas = read_line_timed(
+        f"[1/3] Dice (D6)\n  Roll ~50 times ({need} for full {target}-bit resilience). Any separator.",
+        echo=True)
+    rolls = sum(1 for c in txt if c in "123456")
+    if rolls == 0:
+        return None
+    vb = rolls * math.log2(6)
+    tb = len(deltas) * TIMING_BITS
+    blob = txt.encode() + pack_deltas(deltas)
+    label = f"dice: {rolls} rolls = {vb:.0f} bits" + (f" (+{tb:.0f} timing)" if deltas else "")
+    return (blob, label, vb + tb)
+
+
+def collect_coin(target):
+    txt, deltas = read_line_timed(
+        "[2/3] Coin (H/T)\n  Flip ~30 times. Any separator (H/T).",
+        echo=True)
+    flips = sum(1 for c in txt.upper() if c in "HT")
+    if flips == 0:
+        return None
+    vb = float(flips)
+    tb = len(deltas) * TIMING_BITS
+    blob = txt.encode() + pack_deltas(deltas)
+    label = f"coin: {flips} flips = {vb:.0f} bits" + (f" (+{tb:.0f} timing)" if deltas else "")
+    return (blob, label, vb + tb)
+
+
+def collect_mash(target):
+    txt, deltas = read_line_timed(
+        "[3/3] Mash keys\n  Mash randomly for a few seconds - timing is the entropy. Enter to stop.",
+        echo=False, counter_label="keys")
+    if not txt:
+        return None
+    cb = len(txt) * MASH_CHAR_BITS
+    tb = len(deltas) * TIMING_BITS
+    blob = txt.encode() + pack_deltas(deltas)
+    return (blob, f"mash: {len(txt)} keys = ~{cb + tb:.0f} bits (rough)", cb + tb)
+
+
+def estimate_text(s):
+    """Rough estimate for non-interactive -e text."""
+    dice = sum(1 for c in s if c in "123456")
+    other = len([c for c in s if not c.isspace()]) - dice
+    return dice * math.log2(6) + other * 2.0
 
 
 # ---------- device capture ----------
@@ -145,7 +190,7 @@ def capture_device(port, baud, n):
     while len(buf) < n:
         chunk = s.read(min(8192, n - len(buf)))
         if not chunk:
-            sys.exit("device timeout — is it running the phase-4 firmware? (BOOT+RESET to flash)")
+            sys.exit("device timeout - is it running the guerrilla-entropy firmware? (BOOT+RESET to flash)")
         buf.extend(chunk)
     s.write(b"S")
     s.flush()
@@ -173,39 +218,56 @@ def main():
     if a.bip39 and a.bytes not in (16, 20, 24, 28, 32):
         sys.exit(f"--bip39 requires -n in {{16,20,24,28,32}}, got {a.bytes}")
 
-    dev = capture_device(a.port, a.baud, a.bytes)
+    target = a.bytes * 8
 
-    ext_blob, ext_chars, ext_timings = None, 0, 0
+    # 1. collect external entropy
+    ext_sources = []   # list of (blob, label, bits)
     if a.device_only:
         pass
     elif a.external is not None:
-        ext_blob = a.external.encode("utf-8")
-        ext_chars = len(a.external)
+        bits = estimate_text(a.external)
+        ext_sources.append((a.external.encode(), f"-e text: ~{bits:.0f} bits (rough)", bits))
     else:
-        ext_blob, ext_chars, ext_timings = collect_interactive()
+        print(f"\n== External entropy (Enter to skip any step) ==")
+        print(f"Target for device-compromised resilience: {target} bits\n")
+        for collector in (collect_dice, collect_coin, collect_mash):
+            res = collector(target)
+            if res:
+                ext_sources.append(res)
+                print(f"  -> {res[1]}\n")
 
-    if ext_blob:
-        ext = hashlib.shake_256(ext_blob).digest(a.bytes)
+    # 2. capture device bytes
+    dev = capture_device(a.port, a.baud, a.bytes)
+
+    # 3. mix
+    if ext_sources:
+        full_blob = b"".join(s[0] for s in ext_sources)
+        ext = hashlib.shake_256(full_blob).digest(a.bytes)
         seed = bytes(x ^ y for x, y in zip(dev, ext))
+        total_ext = sum(s[2] for s in ext_sources)
     else:
         ext = None
         seed = dev
+        total_ext = 0
 
+    # 4. output
     dev_bits = len(dev) * 8
     print()
     print(f"device   ({len(dev):2d}B): {dev.hex()}")
     print(f"  ~{dev_bits} bits (device floor; TRNG-backed)")
     if ext is not None:
-        ext_bits, breakdown = estimate_external(ext_blob[:ext_chars], ext_timings)
         print(f"external ({len(ext):2d}B): {ext.hex()}")
-        print(f"  ~{ext_bits:.0f} bits est. ({breakdown})  [rough - resilience if device compromised]")
+        for _, label, _ in ext_sources:
+            print(f"  - {label}")
+        status = "sufficient" if total_ext >= target else "below target (device still carries the seed)"
+        print(f"  total ~{total_ext:.0f} bits (target {target}) - {status}")
+        print(f"  [external = resilience if device compromised]")
     else:
-        ext_bits = 0
         print("external      : <none - device-only>")
     print("-" * 39)
     print(f"seed     ({len(seed):2d}B): {seed.hex()}")
-    if ext_bits:
-        print(f"  ~{dev_bits} bits via device + ~{ext_bits:.0f} external as resilience")
+    if ext is not None:
+        print(f"  ~{dev_bits} bits via device + ~{total_ext:.0f} external as resilience")
     else:
         print(f"  ~{dev_bits} bits (device floor, device-only)")
     if a.bip39:
