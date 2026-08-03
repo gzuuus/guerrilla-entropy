@@ -90,7 +90,6 @@ def read_line_timed(prompt, echo=True, counter_label=None):
         old = termios.tcgetattr(fd)
         chars, deltas = [], []
         prev = time.perf_counter_ns()
-        n = 0
         try:
             tty.setcbreak(fd)
             while True:
@@ -98,14 +97,23 @@ def read_line_timed(prompt, echo=True, counter_label=None):
                 now = time.perf_counter_ns()
                 if ch in ("\n", "\r"):
                     break
+                if ch in ("\x7f", "\x08"):    # DEL / Backspace - edit, not entropy
+                    if chars:
+                        chars.pop()
+                        if echo:
+                            sys.stdout.write("\b \b"); sys.stdout.flush()
+                        elif counter_label:
+                            sys.stdout.write(f"\r  {counter_label}: {len(chars)}   ")
+                            sys.stdout.flush()
+                    prev = now
+                    continue
                 deltas.append(now - prev)
                 chars.append(ch)
                 prev = now
-                n += 1
                 if echo:
                     sys.stdout.write(ch); sys.stdout.flush()
                 elif counter_label:
-                    sys.stdout.write(f"\r  {counter_label}: {n} ")
+                    sys.stdout.write(f"\r  {counter_label}: {len(chars)} ")
                     sys.stdout.flush()
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
@@ -259,17 +267,18 @@ def main():
         print(f"external ({len(ext):2d}B): {ext.hex()}")
         for _, label, _ in ext_sources:
             print(f"  - {label}")
-        status = "sufficient" if total_ext >= target else "below target (device still carries the seed)"
-        print(f"  total ~{total_ext:.0f} bits (target {target}) - {status}")
-        print(f"  [external = resilience if device compromised]")
+        if total_ext >= target:
+            print(f"  => sufficient device-compromised resilience (>= {target} bits)")
+        else:
+            print(f"  => ~{total_ext:.0f} bits, short of {target} (device carries the seed)")
+        print(f"  [a {len(seed)}B seed holds at most {dev_bits} bits; external only matters if the device is compromised]")
     else:
         print("external      : <none - device-only>")
     print("-" * 39)
     print(f"seed     ({len(seed):2d}B): {seed.hex()}")
-    if ext is not None:
-        print(f"  ~{dev_bits} bits via device + ~{total_ext:.0f} external as resilience")
-    else:
-        print(f"  ~{dev_bits} bits (device floor, device-only)")
+    print(f"  {dev_bits} bits - full for {len(seed)}B. Device-backed;"
+          + (" external adds resilience if device compromised." if ext is not None
+             else " device-only."))
     if a.bip39:
         words_count = (len(seed) * 8 + len(seed) * 8 // 32) // 11
         print()
