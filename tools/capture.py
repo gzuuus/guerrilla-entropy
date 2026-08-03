@@ -7,7 +7,7 @@ send 'S'. Output is raw binary (8-bit clean), suitable for `ent` and NIST STS.
   source: 'all' (default) | index 0-9
   mode:   'mixed' (default, via SHA-256 pool) | 'raw' (bypass pool)
 """
-import argparse, serial, time, sys
+import argparse, os, serial, time, sys
 
 
 def main():
@@ -22,7 +22,15 @@ def main():
     ap.add_argument("-m", "--mode", default="mixed", choices=["mixed", "raw"])
     a = ap.parse_args()
 
-    s = serial.Serial(a.port, a.baud, timeout=2.0)
+    if not os.path.exists(a.port):
+        sys.exit(f"device not found at {a.port}\n"
+                 f"  is it plugged in and running firmware (not in bootloader mode)?\n"
+                 f"  BOOT+RESET is only for flashing; tap RESET to run normally.")
+    try:
+        s = serial.Serial(a.port, a.baud, timeout=2.0)
+    except serial.SerialException as e:
+        sys.exit(f"cannot open {a.port}: {e}\n"
+                 f"  (permissions? try: sudo usermod -aG dialout $USER, then re-login)")
     time.sleep(0.3)                # let device notice DTR
     s.reset_input_buffer()         # drain boot banner / stale bytes
 

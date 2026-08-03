@@ -101,8 +101,20 @@ def collect_interactive():
 
 # ---------- device capture ----------
 
+def open_serial(port, baud, timeout):
+    if not os.path.exists(port):
+        sys.exit(f"device not found at {port}\n"
+                 f"  is it plugged in and running firmware (not in bootloader mode)?\n"
+                 f"  BOOT+RESET is only for flashing; tap RESET to run normally.")
+    try:
+        return serial.Serial(port, baud, timeout=timeout)
+    except serial.SerialException as e:
+        sys.exit(f"cannot open {port}: {e}\n"
+                 f"  (permissions? try: sudo usermod -aG dialout $USER, then re-login)")
+
+
 def capture_device(port, baud, n):
-    s = serial.Serial(port, baud, timeout=4.0)
+    s = open_serial(port, baud, 4.0)
     time.sleep(0.3)
     s.reset_input_buffer()
     s.write(b"aM")          # all sources, mixed mode
