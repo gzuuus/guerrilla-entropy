@@ -1,0 +1,20 @@
+# ALL SOURCES MIXED (trng + adc_float -> pool)
+# size:  bytes   date: 2026-08-03T11:40:18Z
+# captured via: tools/capture.py
+
+500000
+
+0,File-bytes,Entropy,Chi-square,Mean,Monte-Carlo-Pi,Serial-Correlation
+1,500000,7.999665,231.836672,127.660732,3.143869,-0.001324
+
+Entropy = 7.999665 bits per byte.
+
+Optimum compression would reduce the size
+of this 500000 byte file by 0 percent.
+
+Chi square distribution for 500000 samples is 231.84, and randomly
+would exceed this value 84.82 percent of the times.
+
+Arithmetic mean value of data bytes is 127.6607 (127.5 = random).
+Monte Carlo value for Pi is 3.143868575 (error 0.07 percent).
+Serial correlation coefficient is -0.001324 (totally uncorrelated = 0.0).

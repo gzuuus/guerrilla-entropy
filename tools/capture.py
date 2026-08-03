@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Capture raw entropy bytes from the guerrilla-entropy device.
 
-Protocol: drain boot banner -> send 'G' -> read N raw bytes -> send 'S'.
-Output is raw binary (8-bit clean), suitable for `ent` and NIST STS.
+Drives the phase-4 protocol: select source + mode, send 'G', read N bytes,
+send 'S'. Output is raw binary (8-bit clean), suitable for `ent` and NIST STS.
+
+  source: 'all' (default) | index 0-9
+  mode:   'mixed' (default, via SHA-256 pool) | 'raw' (bypass pool)
 """
 import argparse, serial, time, sys
 
@@ -12,15 +15,29 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-n", "--bytes", type=int, default=1_000_000,
                     help="bytes to capture (default 1 MB)")
-    ap.add_argument("-o", "--out", default="trng.bin", help="output file")
+    ap.add_argument("-o", "--out", default="entropy.bin", help="output file")
     ap.add_argument("-p", "--port", default="/dev/ttyACM0")
     ap.add_argument("-b", "--baud", type=int, default=115200)
+    ap.add_argument("-s", "--source", default="all", help="'all' or source index 0-9")
+    ap.add_argument("-m", "--mode", default="mixed", choices=["mixed", "raw"])
     a = ap.parse_args()
 
     s = serial.Serial(a.port, a.baud, timeout=2.0)
-    time.sleep(0.3)               # let device notice DTR
-    s.reset_input_buffer()        # drain boot banner / stale bytes
-    s.write(b'G')                 # start streaming
+    time.sleep(0.3)                # let device notice DTR
+    s.reset_input_buffer()         # drain boot banner / stale bytes
+
+    # select source
+    if a.source == "all":
+        s.write(b'a')
+    elif a.source.isdigit():
+        s.write(a.source.encode())
+    s.flush()
+    time.sleep(0.05)
+    # select mode
+    s.write(b'M' if a.mode == "mixed" else b'R')
+    s.flush()
+    time.sleep(0.05)
+    s.write(b'G')                  # stream
     s.flush()
 
     written, t0 = 0, time.time()
@@ -32,13 +49,14 @@ def main():
                 break
             f.write(chunk)
             written += len(chunk)
-    s.write(b'S')                 # stop streaming
+    s.write(b'S')
     s.flush()
     s.close()
 
     dt = time.time() - t0
     rate = (written * 8 / dt / 1000) if dt else 0
-    print(f"wrote {written} bytes to {a.out}  ({dt:.1f}s, {rate:.1f} kbit/s)")
+    print(f"wrote {written} bytes to {a.out}  "
+          f"(source={a.source} mode={a.mode}, {dt:.1f}s, {rate:.1f} kbit/s)")
 
 
 if __name__ == "__main__":

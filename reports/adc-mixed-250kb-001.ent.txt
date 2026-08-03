@@ -1,0 +1,24 @@
+# ADC SOLO MIXED (through SHA-256 pool) — same source, after the mixer
+# size:  bytes   date: 2026-08-03T11:40:18Z
+# captured via: tools/capture.py
+
+250000
+# raw 6.8 bits/byte -> mixed 7.999 bits/byte. Pool purifies the bias.
+# CAVEAT: ent proves uniformity, NOT unpredictability. The SHA pool
+# makes any input look uniform; security comes from real input entropy
+# (raw ADC carried ~6.8 bits/byte) + other sources + external dice.
+
+0,File-bytes,Entropy,Chi-square,Mean,Monte-Carlo-Pi,Serial-Correlation
+1,250000,7.999219,270.615552,127.215480,3.139634,0.001138
+
+Entropy = 7.999219 bits per byte.
+
+Optimum compression would reduce the size
+of this 250000 byte file by 0 percent.
+
+Chi square distribution for 250000 samples is 270.62, and randomly
+would exceed this value 23.97 percent of the times.
+
+Arithmetic mean value of data bytes is 127.2155 (127.5 = random).
+Monte Carlo value for Pi is 3.139634234 (error 0.06 percent).
+Serial correlation coefficient is 0.001138 (totally uncorrelated = 0.0).

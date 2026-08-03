@@ -1,0 +1,21 @@
+# ADC SOLO RAW (bypass pool) — floating-pin ADC1 GPIO1, 2 low bits x4 reads/byte
+# size:  bytes   date: 2026-08-03T11:40:18Z
+# captured via: tools/capture.py
+
+250000
+# expect bias (LSBs are noisy but non-uniform). This is the INPUT to the pool.
+
+0,File-bytes,Entropy,Chi-square,Mean,Monte-Carlo-Pi,Serial-Correlation
+1,250000,6.805466,957152.631808,145.537124,2.342341,0.147977
+
+Entropy = 6.805466 bits per byte.
+
+Optimum compression would reduce the size
+of this 250000 byte file by 14 percent.
+
+Chi square distribution for 250000 samples is 957152.63, and randomly
+would exceed this value less than 0.01 percent of the times.
+
+Arithmetic mean value of data bytes is 145.5371 (127.5 = random).
+Monte Carlo value for Pi is 2.342341477 (error 25.44 percent).
+Serial correlation coefficient is 0.147977 (totally uncorrelated = 0.0).
