@@ -4,6 +4,7 @@
 #include "sources/adc_float.h"
 #include "pool.h"
 #include "health.h"
+#include "display.h"
 
 // Phase 5 — health-gated mixer. Every source's gather() passes a repetition
 // + proportion test before entering the pool. Fail-close: if no source is
@@ -33,10 +34,14 @@ bool raw_mode = false;   // true = bypass pool + health (inspection only)
 bool streaming = false;
 uint64_t bytes_emitted = 0;
 uint64_t failclose_rounds = 0;
+
+OledDisplay display;
+bool have_display = false;
 }  // namespace
 
 static void print_info() {
   Serial.println("[guerrilla-entropy] phase 5 (health-gated)");
+  Serial.printf("display: %s\n", have_display ? "OLED 128x64" : "none (headless)");
   for (size_t i = 0; i < num_sources; i++)
     Serial.printf("  %zu=%-12s pass=%llu fail=%llu\n", i,
                   slots[i].src->name(), slots[i].passed, slots[i].failed);
@@ -82,6 +87,7 @@ void setup() {
   Serial.begin(115200);
   for (auto& s : slots) s.src->begin();
   pool.begin();
+  have_display = display.begin();
   print_info();
   Serial.println("cmd: 0-9 solo a=all M=mixed R=raw G=stream S=stop I=info T=test");
 }
@@ -100,6 +106,32 @@ void loop() {
       case 'S': streaming = false;  break;
       case 'I': print_info();       break;
       case 'T': run_selftest();      break;
+    }
+  }
+
+  // throttled status redraw (~4 Hz). Skips entirely if no panel. The ~25 ms
+  // I2C send happens at most 4x/s so it doesn't choke the entropy hot loop.
+  if (have_display) {
+    static uint32_t last_disp = 0;
+    uint32_t now = millis();
+    if (now - last_disp >= 250) {
+      last_disp = now;
+      char mode[16];
+      if (raw_mode)            snprintf(mode, sizeof mode, "RAW");
+      else if (solo >= 0)      snprintf(mode, sizeof mode, "SOLO:%s", slots[solo].src->name());
+      else                     snprintf(mode, sizeof mode, "MIXED");
+      DisplaySnapshot s;
+      s.mode = mode;
+      s.streaming = streaming;
+      s.emitted = bytes_emitted;
+      s.failclose = failclose_rounds;
+      for (size_t i = 0; i < num_sources && i < (size_t)DisplaySnapshot::MAX_SRC; i++) {
+        s.name[i] = slots[i].src->name();
+        s.pass[i] = slots[i].passed;
+        s.fail[i] = slots[i].failed;
+      }
+      s.n_src = num_sources;
+      display.show(s);
     }
   }
 
