@@ -19,8 +19,8 @@ AdcFloatSource adc;
 
 struct SourceSlot {
   EntropySource* src;
-  uint32_t passed = 0;
-  uint32_t failed = 0;
+  uint64_t passed = 0;
+  uint64_t failed = 0;
   SourceSlot(EntropySource* s) : src(s) {}
 };
 SourceSlot slots[] = { &trng, &adc };
@@ -31,16 +31,16 @@ Pool pool;
 int solo = -1;           // -1 = aggregate all
 bool raw_mode = false;   // true = bypass pool + health (inspection only)
 bool streaming = false;
-uint32_t bytes_emitted = 0;
-uint32_t failclose_rounds = 0;
+uint64_t bytes_emitted = 0;
+uint64_t failclose_rounds = 0;
 }  // namespace
 
 static void print_info() {
   Serial.println("[guerrilla-entropy] phase 5 (health-gated)");
   for (size_t i = 0; i < num_sources; i++)
-    Serial.printf("  %zu=%-12s pass=%u fail=%u\n", i,
+    Serial.printf("  %zu=%-12s pass=%llu fail=%llu\n", i,
                   slots[i].src->name(), slots[i].passed, slots[i].failed);
-  Serial.printf("active: %s | mode: %s | emitted: %u | failclose: %u | streaming: %d\n",
+  Serial.printf("active: %s | mode: %s | emitted: %llu | failclose: %llu | streaming: %d\n",
                 solo < 0 ? "all" : slots[solo].src->name(),
                 raw_mode ? "raw" : "mixed",
                 bytes_emitted, failclose_rounds, streaming);
