@@ -47,12 +47,15 @@ static void print_info() {
 }
 
 // Gather + health-check one source into a temp buffer; on pass, fold into pool.
-// Returns true if the source contributed this round.
+// Returns true if the source contributed this round. Honors gather()'s actual
+// byte count (may be < n) so an under-filling source never pools uninitialized
+// bytes, and a 0-byte gather doesn't defeat fail-close (the freshness policy).
 static bool poll_source(size_t i, uint8_t* buf, size_t n) {
-  slots[i].src->gather(buf, n);
-  if (HealthCheck::check(buf, n)) {
+  size_t got = slots[i].src->gather(buf, n);
+  if (got == 0) return false;                  // no contribution; keep fail-close honest
+  if (HealthCheck::check(buf, got)) {
     slots[i].passed++;
-    pool.add(buf, n);
+    pool.add(buf, got);
     return true;
   }
   slots[i].failed++;
@@ -80,7 +83,7 @@ void setup() {
   for (auto& s : slots) s.src->begin();
   pool.begin();
   print_info();
-  Serial.println("cmd: 0-9 solo a=all M=mixed R=raw G=stream S=stop I=info T=test");;
+  Serial.println("cmd: 0-9 solo a=all M=mixed R=raw G=stream S=stop I=info T=test");
 }
 
 void loop() {
@@ -108,8 +111,9 @@ void loop() {
     uint8_t raw[CHUNK];
     size_t off = 0;
     if (solo >= 0 && solo < (int)num_sources) {
-      off = slots[solo].src->gather(raw, CHUNK);
+      off = slots[solo].src->gather(raw, CHUNK);   // honor actual byte count
     } else {
+      // fair interleave for inspection (assumes full fill; `ent` catches a gap)
       size_t per = CHUNK / num_sources;
       for (size_t i = 0; i < num_sources; i++) {
         slots[i].src->gather(raw + off, per);
@@ -117,8 +121,8 @@ void loop() {
       }
       if (off < CHUNK) slots[0].src->gather(raw + off, CHUNK - off);
     }
-    Serial.write(raw, CHUNK);
-    bytes_emitted += CHUNK;
+    Serial.write(raw, off);
+    bytes_emitted += off;
     return;
   }
 
