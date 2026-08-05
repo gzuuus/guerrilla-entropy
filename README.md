@@ -82,19 +82,43 @@ Planned sources (SX1262 LoRa RSSI, avalanche-noise board) are tracked in
 [`design/future-phases.md`](design/future-phases.md). To add one, see
 "Adding an entropy source" in [`AGENTS.md`](AGENTS.md).
 
-## Quickstart
+## Walkthrough
 
-```bash
-cd guerrilla-entropy
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+From a blank board to a seed you can trust.
 
-# build + flash — enter BOOT+RESET before upload, tap RESET after (see AGENTS.md)
-.venv/bin/pio run -t upload
+1. **Flash the firmware.**
+   - Builders:
+     ```bash
+     python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+     .venv/bin/pio run -t upload      # BOOT+RESET before, tap RESET after
+     ```
+   - No build tools? Grab `guerrilla-entropy-merged.bin` from
+     [Releases](../../releases) and follow [`docs/FLASHING.md`](docs/FLASHING.md).
 
-# generate a 256-bit seed (device + interactive dice/keystrokes), BIP39 mnemonic
-.venv/bin/python3 tools/seed.py --bip39
-```
+2. **Confirm it's alive.** A second after RESET the OLED shows `guerrilla-entropy`
+   + per-source health. Over serial at 115200, send `I` (status) and `T`
+   (health self-test) — see [Serial protocol](#serial-protocol).
+
+3. **Generate a seed.**
+   ```bash
+   pip install pyserial
+   python3 tools/seed.py --bip39      # 256-bit seed + BIP39 mnemonic
+   ```
+   This walks you through dice rolls, coin flips, and key-mashing, then
+   **XOR-mixes that into the device's bytes**. The device only ever *adds*
+   uncertainty; your external entropy keeps the seed safe even if the hardware
+   were compromised. Press Enter to skip any step, `--device-only` to skip all
+   of it, or `-e "text"` to feed entropy non-interactively.
+
+4. **(Optional) Validate it yourself.** Capture a large sample and run the same
+   gate the project uses:
+   ```bash
+   python3 tools/capture.py -o entropy.bin      # 1 MB, mixed (default)
+   ent entropy.bin                              # want ~8.0 bits/byte
+   gzip -c entropy.bin | wc -c                  # want ≈ 1000000 (incompressible)
+   ```
+   `ent` checks *uniformity*, not *entropy* — real trust is independent sources
+   + your dice. See `reports/` for prior runs.
 
 ## Serial protocol
 
