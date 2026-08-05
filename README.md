@@ -20,14 +20,34 @@ Prebuilt `.bin` releases and a no-build flashing guide are in
 [`docs/FLASHING.md`](docs/FLASHING.md). See `design/` for what's still planned
 (standalone/battery mode, SX1262 RSSI source).
 
-## Target hardware (dev)
+## Hardware support
 
-LilyGo T3S3 V1 — ESP32-S3 (4 MB flash, 2 MB PSRAM), SX1262 LoRa, IP5306 PMIC,
-OLED. No onboard IMU, no SD slot. Port: `/dev/ttyACM0` (native USB CDC).
+**Dev target:** LilyGo T3S3 V1 — ESP32-S3 (4 MB flash, 2 MB PSRAM), SX1262 LoRa,
+IP5306 PMIC, onboard OLED. No IMU, no SD slot. Port: `/dev/ttyACM0` (native
+USB CDC).
 
-The architecture is chip-agnostic: the `EntropySource` registry probes at
-runtime, so a generic ESP32 with no LoRa still works (baseline sources are
-universal on every ESP32). Multi-chip builds are a planned follow-up.
+The architecture is chip-agnostic: every `EntropySource` and the display probe
+at runtime, so a board with only the baseline hardware still works.
+
+**Boards**
+
+| Board | Chip | Tested? | Notes |
+|---|---|---|---|
+| LilyGo T3S3 V1 | ESP32-S3 | ✅ | dev target; onboard OLED |
+| Other ESP32-S3 boards | ESP32-S3 | — | baseline sources work; set `-DOLED_SDA`/`-DOLED_SCL` if a display is wired |
+| ESP32 / S2 / C3 / C6 | various | — | baseline only; OLED needs pin overrides; no multi-chip build yet |
+
+**Displays**
+
+| Display | Tested? | Notes |
+|---|---|---|
+| SSD1306 128×64, I²C 0x3C | ✅ | default; the T3S3 V1 OLED |
+| Other SSD1306 (128×32, etc.) | — | swap geometry in `src/display.h` |
+| SH1106 / other controllers | — | needs a different U8g2 constructor |
+
+Anything marked ✅ is what releases are built and verified against. Anything
+marked — should work by the probe-and-skip design but hasn't been confirmed on
+hardware.
 
 ## How it works
 
@@ -75,6 +95,24 @@ python3 -m venv .venv
 # generate a 256-bit seed (device + interactive dice/keystrokes), BIP39 mnemonic
 .venv/bin/python3 tools/seed.py --bip39
 ```
+
+## Serial protocol
+
+The USB CDC interface takes single-byte commands (the host tools send these
+for you; handy for inspection):
+
+| Key | Action |
+|---|---|
+| `0`–`9` | solo a source by index |
+| `a` | aggregate all sources |
+| `M` | mixed mode (default: health-gated, through the pool) |
+| `R` | raw mode (bypass pool + health — inspection only) |
+| `G` / `S` | start / stop streaming |
+| `I` | print status + per-source counters |
+| `T` | run the on-device health self-test |
+
+`T` is the quickest way to confirm the health gate rejects stuck/biased input
+and accepts varied input.
 
 ## Quality gate
 
