@@ -13,10 +13,12 @@ into Bitcoin seed generation.
 
 ## Status
 
-Working MVP. The device produces validated uniform output, every source is
-health-gated with fail-close, and the host tool generates seeds with optional
-external entropy + BIP39 mnemonics. See `design/` for what's planned
-(standalone/battery mode, distribution, SX1262 RSSI source).
+Working MVP with an on-device status display. The device produces validated
+uniform output, every source is health-gated with fail-close, and the host
+tool generates seeds with optional external entropy + BIP39 mnemonics.
+Prebuilt `.bin` releases and a no-build flashing guide are in
+[`docs/FLASHING.md`](docs/FLASHING.md). See `design/` for what's still planned
+(standalone/battery mode, SX1262 RSSI source).
 
 ## Target hardware (dev)
 
