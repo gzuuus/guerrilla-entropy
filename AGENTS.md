@@ -159,7 +159,6 @@ independent sources + external dice, never from a single gate pass.
 
 ## Open questions (don't invent answers)
 
-- License (TBD).
 - Final pin assignments & partition table.
 - Additional chip targets / supported boards.
 - SX1262 RSSI entropy-rate estimate (measure, don't guess).

@@ -70,4 +70,4 @@ uniform; real trust comes from multiple independent sources + external dice.
 
 ## License
 
-TBD
+MIT — see [LICENSE](LICENSE).
