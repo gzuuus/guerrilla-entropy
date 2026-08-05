@@ -37,8 +37,8 @@ sources (TRNG, ADC) -> health gate (fail-close) -> SHA-256 pool -> USB CDC
                        host: XOR external entropy -> hex / BIP39 seed
 ```
 
-- **Sources**: `esp_random()` TRNG + floating-pin ADC LSBs. Each implements
-  `EntropySource` and probes in `begin()`; absent sources are skipped.
+- **Sources**: each implements `EntropySource` and probes in `begin()`; an
+  absent source is skipped, never fatal. See [Entropy sources](#entropy-sources).
 - **Health gate**: per-source repetition + proportion tests (NIST SP 800-90B
   simplified). A failing source is skipped, never fatal; if no source is
   healthy, the device emits nothing (fail-close).
@@ -46,6 +46,21 @@ sources (TRNG, ADC) -> health gate (fail-close) -> SHA-256 pool -> USB CDC
   output. Output stays XOR-mixable with external entropy.
 - **Host tool**: captures N bytes, optionally XOR-mixes dice/keystrokes, prints
   hex + BIP39 mnemonic with an honest entropy estimate.
+
+## Entropy sources
+
+Every source implements `EntropySource`, probes its hardware in `begin()`, and
+is **skipped (not fatal)** if absent — so a board with only the baseline
+sources still produces entropy. The SHA-256 pool mixes whatever's healthy.
+
+| Source | File | Harvests | Present on |
+|---|---|---|---|
+| **TRNG** | `src/sources/trng.h` | `esp_random()` — the ESP32-S3 hardware RNG (internal RF + thermal noise) | every ESP32 (baseline) |
+| **ADC float** | `src/sources/adc_float.h` | low 2 bits × 4 reads of a floating ADC1 pin (ambient EM) | every ESP32 (baseline) |
+
+Planned sources (SX1262 LoRa RSSI, avalanche-noise board) are tracked in
+[`design/future-phases.md`](design/future-phases.md). To add one, see
+"Adding an entropy source" in [`AGENTS.md`](AGENTS.md).
 
 ## Quickstart
 
