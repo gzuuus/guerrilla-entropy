@@ -109,8 +109,10 @@ void loop() {
     }
   }
 
-  // throttled status redraw (~4 Hz). Skips entirely if no panel. The ~25 ms
-  // I2C send happens at most 4x/s so it doesn't choke the entropy hot loop.
+  // Status redraw at ~4 Hz. 4 Hz keeps the I2C sendBuffer out of the way of
+  // the entropy stream; all-sources throughput is bounded by the ADC source's
+  // analogRead() cost, not by this redraw (measured: trng-solo mixed stays
+  // ~110 KB/s with the display live, matching the pre-display baseline).
   if (have_display) {
     static uint32_t last_disp = 0;
     uint32_t now = millis();
